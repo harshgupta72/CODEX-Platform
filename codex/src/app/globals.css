@@ -1,0 +1,210 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Turbopack Menu Styling */
+.__turbopack_dev_overlay__ {
+  position: fixed !important;
+  top: 80px !important;
+  right: 20px !important;
+  z-index: 40 !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: none !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-content] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(8px) !important;
+  min-width: 280px !important;
+  max-width: 320px !important;
+}
+
+.dark .__turbopack_dev_overlay__ [data-nextjs-dialog-content] {
+  background: rgba(31, 41, 55, 0.9) !important;
+  border-color: #4b5563 !important;
+  color: white !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-content] h3 {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  color: white !important;
+  margin: 0 !important;
+  padding: 16px 20px !important;
+  border-radius: 15px 15px 0 0 !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-content] div {
+  padding: 16px 20px !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-content] button {
+  background: #f3f4f6 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  margin: 4px 0 !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-content] button:hover {
+  background: #e5e7eb !important;
+  border-color: #9ca3af !important;
+  transform: translateY(-1px) !important;
+}
+
+.dark .__turbopack_dev_overlay__ [data-nextjs-dialog-content] button {
+  background: rgba(55, 65, 81, 0.8) !important;
+  border-color: #6b7280 !important;
+  color: #f9fafb !important;
+}
+
+.dark .__turbopack_dev_overlay__ [data-nextjs-dialog-content] button:hover {
+  background: rgba(75, 85, 99, 0.9) !important;
+  border-color: #9ca3af !important;
+}
+
+/* Make the turbo menu trigger button styled */
+.__turbopack_dev_overlay__ [data-nextjs-dialog-trigger] {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 18px !important;
+  font-weight: bold !important;
+  cursor: pointer !important;
+  box-shadow: 0 10px 25px -12px rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(8px) !important;
+  transition: all 0.3s ease !important;
+  z-index: 50 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-trigger]:hover {
+  transform: translateY(-2px) scale(1.05) !important;
+  box-shadow: 0 15px 35px -12px rgba(0, 0, 0, 0.35) !important;
+}
+
+.__turbopack_dev_overlay__ [data-nextjs-dialog-trigger]:active {
+  transform: translateY(0) scale(0.95) !important;
+}
+
+/* Hide the original trigger and replace with styled version */
+.__turbopack_dev_overlay__ [data-nextjs-dialog-trigger]::before {
+  content: "⚡" !important;
+  font-size: 20px !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .__turbopack_dev_overlay__ [data-nextjs-dialog-trigger] {
+    top: 15px !important;
+    right: 15px !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
+  
+  .__turbopack_dev_overlay__ [data-nextjs-dialog-content] {
+    max-width: 280px !important;
+    margin: 20px !important;
+  }
+}
+
+/* Custom animations for chatbot */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+}
+
+@keyframes bounce-in {
+  0% { transform: scale(0.3) rotate(-180deg); opacity: 0; }
+  50% { transform: scale(1.05) rotate(-90deg); }
+  70% { transform: scale(0.9) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  0% { transform: translateX(100%) scale(0.8); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(5deg); }
+  75% { transform: rotate(-5deg); }
+}
+
+.chatbot-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.chatbot-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.chatbot-bounce {
+  animation: bounce-in 0.6s ease-out;
+}
+
+.chatbot-slide {
+  animation: slide-in-right 0.5s ease-out;
+}
+
+.chatbot-wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
