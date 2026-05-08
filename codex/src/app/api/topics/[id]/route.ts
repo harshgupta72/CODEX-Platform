@@ -60,22 +60,3 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const data = await req.json();
-  const { id } = await params;
-  const col = await getCollection("topics");
-  const update: any = { updatedAt: new Date() };
-  ["title", "description", "status", "orderIndex", "duration", "imageDataUrl", "codeSnippet", "videoUrl", "videoDataUrl", "externalLink"].forEach(k => {
-    if (data[k] !== undefined) update[k] = data[k];
-  });
-  await col.updateOne({ _id: new ObjectId(id) }, { $set: update });
-  return new Response(null, { status: 204 });
-}
-
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const col = await getCollection("topics");
-  await col.deleteOne({ _id: new ObjectId(id) });
-  return new Response(null, { status: 204 });
-}
