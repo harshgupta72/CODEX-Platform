@@ -16,7 +16,6 @@
     "@monaco-editor/react": "^4.7.0",
     "@types/uuid": "^10.0.0",
     "@xyflow/react": "^12.10.1",
-    "anthropic": "^0.0.0",
     "axios": "^1.12.2",
     "clsx": "^2.1.1",
     "face-api.js": "^0.22.2",

@@ -19,7 +19,6 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  outputFileTracingRoot: __dirname,
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
