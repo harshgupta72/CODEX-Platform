@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import toast from "react-hot-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { Suspense } from "react";
 
 type ProblemDoc = {
   id: string;
@@ -27,7 +28,7 @@ type ProblemDoc = {
   isBlind75?: boolean;
 };
 
-export default function ProblemsPage() {
+function ProblemsContent() {
   const router = useRouter();
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -315,5 +316,13 @@ export default function ProblemsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ProblemsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>}>
+      <ProblemsContent />
+    </Suspense>
   );
 }
