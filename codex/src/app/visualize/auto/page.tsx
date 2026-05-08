@@ -1,511 +1,478 @@
- "use client";
- 
- import { useEffect, useMemo, useRef, useState } from "react";
- import NextDynamic from "next/dynamic";
- import { motion } from "framer-motion";
- import { ChevronLeft, ChevronRight } from "lucide-react";
- 
- const Monaco = NextDynamic(() => import("@monaco-editor/react"), { ssr: false });
- 
- type Algo = "bubble" | "insertion" | "selection" | "quicksort" | "mergesort" | "heapsort" | "shellsort" | "linearsearch" | "binarysearch" | "unknown";
- 
- type Step = {
-   array: number[];
-   i: number;
-   j: number;
-   action: "compare" | "swap" | "set";
- };
- 
- function parseInlineArray(code: string): number[] | null {
-   // Try C/C++: int arr[] = {1,2,3};
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import NextDynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Play, 
+  Pause, 
+  RotateCcw, 
+  FastForward, 
+  Brain, 
+  Code, 
+  Zap,
+  Info,
+  Layers,
+  Database
+} from "lucide-react";
+import toast from "react-hot-toast";
+
+const Monaco = NextDynamic(() => import("@monaco-editor/react"), { ssr: false });
+
+type Algo = "bubble" | "insertion" | "selection" | "quicksort" | "mergesort" | "heapsort" | "shellsort" | "linearsearch" | "binarysearch" | "twosum" | "unknown";
+
+type Step = {
+  array: number[];
+  i: number;
+  j: number;
+  r?: number; // Right pointer for binary search
+  action: "compare" | "swap" | "set" | "found" | "init";
+  explanation: string;
+  hashMap?: Record<number, number>; // For Two Sum
+};
+
+// Parsing helpers
+function parseInlineArray(code: string): number[] | null {
   const cpp = code.match(/int\s+\w+\s*\[\s*\]\s*=\s*\{([^}]+)\}/);
-   if (cpp) {
-     const nums = cpp[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
-     if (nums.length) return nums;
-   }
-   // Try Java: int[] arr = {1,2,3};
+  if (cpp) return cpp[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
+  
   const java = code.match(/int\s*\[\]\s*\w+\s*=\s*\{([^}]+)\}/);
-   if (java) {
-     const nums = java[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
-     if (nums.length) return nums;
-   }
-  // Try Java: new int[] {1,2,3}
-  const jnew = code.match(/new\s+int\s*\[\s*\]\s*\{\s*([^}]+)\}/);
-  if (jnew) {
-    const nums = jnew[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
-    if (nums.length) return nums;
-  }
-  // Try C++ vector: vector<int> v = {1,2,3};
+  if (java) return java[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
+  
   const vec = code.match(/vector\s*<\s*int\s*>\s*\w+\s*=\s*\{([^}]+)\}/i);
-  if (vec) {
-    const nums = vec[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
-    if (nums.length) return nums;
-  }
-   // Try Python: arr = [1, 2, 3]
-   const py = code.match(/(\w+)\s*=\s*\[([^\]]+)\]/);
-   if (py) {
-     const nums = py[2].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
-     if (nums.length) return nums;
-   }
-   return null;
- }
- 
- function detectAlgorithm(code: string): Algo {
-   const c = code.toLowerCase();
-  // Bubble: generic index access with j and j+1 comparisons
+  if (vec) return vec[1].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
+  
+  const py = code.match(/(\w+)\s*=\s*\[([^\]]+)\]/);
+  if (py) return py[2].split(/[, ]+/).filter(Boolean).map(Number).filter(n => !Number.isNaN(n));
+  
+  return null;
+}
+
+function detectAlgorithm(code: string): Algo {
+  const c = code.toLowerCase();
+  if (c.includes("twosum") || c.includes("two-sum")) return "twosum";
   if (/(\w+)\s*\[\s*j\s*\]\s*[<>]=?\s*(\w+)\s*\[\s*j\s*\+\s*1\s*\]/.test(c)) return "bubble";
   if (/min[_ ]?idx|minindex/.test(c) || /\w+\s*\[\s*min[_ ]?idx\s*\]/.test(c)) return "selection";
   if (/key\s*=|(\w+)\s*\[\s*j\s*\]\s*>\s*key/.test(c)) return "insertion";
   if (/quicksort\s*\(|partition\s*\(/.test(c)) return "quicksort";
   if (/mergesort\s*\(|merge\s*\(/.test(c)) return "mergesort";
-  if (/heapsort\s*\(|heapify\s*\(/.test(c)) return "heapsort";
-  if (/shellsort\s*\(|gap\s*=|gapped/.test(c)) return "shellsort";
-  if (/binary\s*search|\bbinarysearch\b|\barrays\.binarysearch\b/.test(c)) return "binarysearch";
-  if (/linear\s*search/.test(c) || /for\s*\(.*\)\s*\{[\s\S]*?\w+\s*\[\s*i\s*\]\s*==\s*target/.test(c)) return "linearsearch";
-   return "unknown";
- }
+  if (/binary\s*search|\bbinarysearch\b/.test(c)) return "binarysearch";
+  if (/linear\s*search/.test(c)) return "linearsearch";
+  return "unknown";
+}
 
 function parseTarget(code: string): number | null {
   const m = code.match(/\b(target|key)\s*=\s*(\-?\d+)/i);
   if (m) return Number(m[2]);
-  const call = code.match(/\bbinarysearch\s*\(\s*\w+\s*,\s*(\-?\d+)\s*\)/i);
-  if (call) return Number(call[1]);
-  return null;
-}
- 
- function bubbleSteps(input: number[]): Step[] {
-   const a = input.slice();
-   const steps: Step[] = [];
-   for (let i = 0; i < a.length - 1; i++) {
-     for (let j = 0; j < a.length - i - 1; j++) {
-       steps.push({ array: a.slice(), i, j, action: "compare" });
-       if (a[j] > a[j + 1]) {
-         const t = a[j]; a[j] = a[j + 1]; a[j + 1] = t;
-         steps.push({ array: a.slice(), i, j, action: "swap" });
-       }
-     }
-   }
-   return steps;
- }
- 
- function insertionSteps(input: number[]): Step[] {
-   const a = input.slice();
-   const steps: Step[] = [];
-   for (let i = 1; i < a.length; i++) {
-     const key = a[i];
-     let j = i - 1;
-     while (j >= 0 && a[j] > key) {
-       steps.push({ array: a.slice(), i, j, action: "compare" });
-       a[j + 1] = a[j];
-       steps.push({ array: a.slice(), i, j, action: "set" });
-       j--;
-     }
-     a[j + 1] = key;
-     steps.push({ array: a.slice(), i, j: j + 1, action: "set" });
-   }
-   return steps;
- }
- 
- function selectionSteps(input: number[]): Step[] {
-   const a = input.slice();
-   const steps: Step[] = [];
-   for (let i = 0; i < a.length - 1; i++) {
-     let minIdx = i;
-     for (let j = i + 1; j < a.length; j++) {
-       steps.push({ array: a.slice(), i, j, action: "compare" });
-       if (a[j] < a[minIdx]) minIdx = j;
-     }
-     if (minIdx !== i) {
-       const t = a[i]; a[i] = a[minIdx]; a[minIdx] = t;
-       steps.push({ array: a.slice(), i, j: minIdx, action: "swap" });
-     }
-   }
-   return steps;
- }
- 
- function getComplexity(algo: Algo) {
-   switch (algo) {
-     case "bubble":
-       return { worst: "O(n^2)", average: "O(n^2)", best: "O(n)", space: "O(1)" };
-     case "insertion":
-       return { worst: "O(n^2)", average: "O(n^2)", best: "O(n)", space: "O(1)" };
-     case "selection":
-       return { worst: "O(n^2)", average: "O(n^2)", best: "O(n^2)", space: "O(1)" };
-    case "quicksort":
-      return { worst: "O(n^2)", average: "O(n log n)", best: "O(n log n)", space: "O(log n)" };
-    case "mergesort":
-      return { worst: "O(n log n)", average: "O(n log n)", best: "O(n log n)", space: "O(n)" };
-    case "heapsort":
-      return { worst: "O(n log n)", average: "O(n log n)", best: "O(n log n)", space: "O(1)" };
-    case "shellsort":
-      return { worst: "O(n^2)", average: "O(n^(3/2))", best: "O(n log^2 n)", space: "O(1)" };
-    case "linearsearch":
-      return { worst: "O(n)", average: "O(n)", best: "O(1)", space: "O(1)" };
-    case "binarysearch":
-      return { worst: "O(log n)", average: "O(log n)", best: "O(1)", space: "O(1)" };
-     default:
-       return { worst: "Unknown", average: "Unknown", best: "Unknown", space: "Unknown" };
-   }
- }
-
-function quickSteps(input: number[]): Step[] {
-  const a = input.slice();
-  const steps: Step[] = [];
-  function partition(low: number, high: number) {
-    const pivot = a[high];
-    let i = low;
-    for (let j = low; j < high; j++) {
-      steps.push({ array: a.slice(), i, j, action: "compare" });
-      if (a[j] <= pivot) {
-        const t = a[i]; a[i] = a[j]; a[j] = t;
-        steps.push({ array: a.slice(), i, j, action: "swap" });
-        i++;
-      }
-    }
-    const t = a[i]; a[i] = a[high]; a[high] = t;
-    steps.push({ array: a.slice(), i, j: high, action: "swap" });
-    return i;
-  }
-  function qsort(low: number, high: number) {
-    if (low < high) {
-      const p = partition(low, high);
-      qsort(low, p - 1);
-      qsort(p + 1, high);
-    }
-  }
-  qsort(0, a.length - 1);
-  return steps;
+  return 9; // Default for Two Sum example
 }
 
-function mergeSteps(input: number[]): Step[] {
+// Algorithm Step Generators
+function bubbleSteps(input: number[]): Step[] {
   const a = input.slice();
-  const steps: Step[] = [];
-  function merge(l: number, m: number, r: number) {
-    const left = a.slice(l, m + 1);
-    const right = a.slice(m + 1, r + 1);
-    let i = 0, j = 0, k = l;
-    while (i < left.length && j < right.length) {
-      steps.push({ array: a.slice(), i: k, j: k, action: "compare" });
-      if (left[i] <= right[j]) {
-        a[k] = left[i++];
-      } else {
-        a[k] = right[j++];
-      }
-      steps.push({ array: a.slice(), i: k, j: k, action: "set" });
-      k++;
-    }
-    while (i < left.length) {
-      a[k] = left[i++];
-      steps.push({ array: a.slice(), i: k, j: k, action: "set" });
-      k++;
-    }
-    while (j < right.length) {
-      a[k] = right[j++];
-      steps.push({ array: a.slice(), i: k, j: k, action: "set" });
-      k++;
-    }
-  }
-  function msort(l: number, r: number) {
-    if (l >= r) return;
-    const m = Math.floor((l + r) / 2);
-    msort(l, m);
-    msort(m + 1, r);
-    merge(l, m, r);
-  }
-  msort(0, a.length - 1);
-  return steps;
-}
-
-function heapSteps(input: number[]): Step[] {
-  const a = input.slice();
-  const steps: Step[] = [];
-  const n = a.length;
-  function siftDown(i: number, end: number) {
-    let largest = i;
-    while (true) {
-      const left = 2 * i + 1;
-      const right = 2 * i + 2;
-      if (left <= end) {
-        steps.push({ array: a.slice(), i, j: left, action: "compare" });
-        if (a[left] > a[largest]) largest = left;
-      }
-      if (right <= end) {
-        steps.push({ array: a.slice(), i, j: right, action: "compare" });
-        if (a[right] > a[largest]) largest = right;
-      }
-      if (largest !== i) {
-        const t = a[i]; a[i] = a[largest]; a[largest] = t;
-        steps.push({ array: a.slice(), i, j: largest, action: "swap" });
-        i = largest;
-      } else {
-        break;
+  const steps: Step[] = [{ array: a.slice(), i: -1, j: -1, action: "init", explanation: "Starting Bubble Sort. Larger elements will 'bubble up' to the end." }];
+  for (let i = 0; i < a.length - 1; i++) {
+    for (let j = 0; j < a.length - i - 1; j++) {
+      steps.push({ array: a.slice(), i, j, action: "compare", explanation: `Comparing ${a[j]} and ${a[j+1]}.` });
+      if (a[j] > a[j + 1]) {
+        const t = a[j]; a[j] = a[j + 1]; a[j + 1] = t;
+        steps.push({ array: a.slice(), i, j, action: "swap", explanation: `${a[j+1]} is greater than ${a[j]}, so we swap them.` });
       }
     }
-  }
-  // Build max heap
-  for (let i = Math.floor(n / 2) - 1; i >= 0; i--) {
-    siftDown(i, n - 1);
-  }
-  // Extract elements
-  for (let end = n - 1; end > 0; end--) {
-    const t = a[0]; a[0] = a[end]; a[end] = t;
-    steps.push({ array: a.slice(), i: 0, j: end, action: "swap" });
-    siftDown(0, end - 1);
   }
   return steps;
 }
 
-function linearSteps(input: number[], target: number | null): Step[] {
-  const a = input.slice();
-  const steps: Step[] = [];
-  for (let i = 0; i < a.length; i++) {
-    steps.push({ array: a.slice(), i, j: i, action: "compare" });
-    if (target != null && a[i] === target) {
-      steps.push({ array: a.slice(), i, j: i, action: "set" });
+function twoSumSteps(nums: number[], target: number): Step[] {
+  const mp: Record<number, number> = {};
+  const steps: Step[] = [{ array: nums, i: -1, j: -1, action: "init", explanation: `Looking for two numbers that add up to ${target} using a Hash Map.` }];
+  
+  for (let i = 0; i < nums.length; i++) {
+    const complement = target - nums[i];
+    steps.push({ 
+      array: nums, 
+      i, 
+      j: -1, 
+      action: "compare", 
+      explanation: `Current number is ${nums[i]}. Looking for its complement: ${target} - ${nums[i]} = ${complement}`,
+      hashMap: { ...mp }
+    });
+    
+    if (complement in mp) {
+      steps.push({ 
+        array: nums, 
+        i, 
+        j: mp[complement], 
+        action: "found", 
+        explanation: `Found it! ${complement} exists in the map at index ${mp[complement]}. Indices are [${mp[complement]}, ${i}].`,
+        hashMap: { ...mp }
+      });
       break;
     }
+    mp[nums[i]] = i;
+    steps.push({ 
+      array: nums, 
+      i, 
+      j: -1, 
+      action: "set", 
+      explanation: `Adding ${nums[i]} to the Hash Map (Value: ${nums[i]}, Index: ${i}).`,
+      hashMap: { ...mp }
+    });
   }
   return steps;
 }
 
-function binarySteps(input: number[], target: number | null): Step[] {
-  const a = input.slice();
-  const steps: Step[] = [];
-  const arr = a.slice().sort((x, y) => x - y);
-  let l = 0, r = arr.length - 1;
-  while (l <= r) {
-    const m = Math.floor((l + r) / 2);
-    steps.push({ array: arr.slice(), i: l, j: m, r, action: "compare" });
-    if (target == null) break;
-    if (arr[m] === target) {
-      steps.push({ array: arr.slice(), i: l, j: m, r, action: "set" });
-      break;
-    } else if (arr[m] < target) {
-      l = m + 1;
-      steps.push({ array: arr.slice(), i: l, j: m, r, action: "set" });
-    } else {
-      r = m - 1;
-      steps.push({ array: arr.slice(), i: l, j: m, r, action: "set" });
-    }
-  }
-  return steps;
+function getComplexity(algo: Algo) {
+  const table: Record<Algo, any> = {
+    bubble: { worst: "O(n²)", average: "O(n²)", best: "O(n)", space: "O(1)" },
+    insertion: { worst: "O(n²)", average: "O(n²)", best: "O(n)", space: "O(1)" },
+    selection: { worst: "O(n²)", average: "O(n²)", best: "O(n²)", space: "O(1)" },
+    quicksort: { worst: "O(n²)", average: "O(n log n)", best: "O(n log n)", space: "O(log n)" },
+    mergesort: { worst: "O(n log n)", average: "O(n log n)", best: "O(n log n)", space: "O(n)" },
+    heapsort: { worst: "O(n log n)", average: "O(n log n)", best: "O(n log n)", space: "O(1)" },
+    shellsort: { worst: "O(n²)", average: "O(n¹.⁵)", best: "O(n log n)", space: "O(1)" },
+    linearsearch: { worst: "O(n)", average: "O(n)", best: "O(1)", space: "O(1)" },
+    binarysearch: { worst: "O(log n)", average: "O(log n)", best: "O(1)", space: "O(1)" },
+    twosum: { worst: "O(n)", average: "O(n)", best: "O(n)", space: "O(n)" },
+    unknown: { worst: "?", average: "?", best: "?", space: "?" }
+  };
+  return table[algo] || table.unknown;
 }
 
-function shellSteps(input: number[]): Step[] {
-  const a = input.slice();
-  const steps: Step[] = [];
-  const n = a.length;
-  for (let gap = Math.floor(n / 2); gap > 0; gap = Math.floor(gap / 2)) {
-    for (let i = gap; i < n; i++) {
-      const temp = a[i];
-      let j = i;
-      while (j >= gap && a[j - gap] > temp) {
-        steps.push({ array: a.slice(), i, j, action: "compare" });
-        a[j] = a[j - gap];
-        steps.push({ array: a.slice(), i: j, j, action: "set" });
-        j -= gap;
-      }
-      a[j] = temp;
-      steps.push({ array: a.slice(), i: j, j, action: "set" });
-    }
-  }
-  return steps;
-}
- 
- export default function VisualizeAutoPage() {
-   const [code, setCode] = useState<string>("");
-   const [language, setLanguage] = useState<string>("cpp");
-   const [array, setArray] = useState<number[]>([]);
+export default function VisualizeAutoPage() {
+  const [code, setCode] = useState<string>("");
+  const [language, setLanguage] = useState<string>("cpp");
+  const [array, setArray] = useState<number[]>([]);
   const [algo, setAlgo] = useState<Algo>("unknown");
-  const [manualAlgo, setManualAlgo] = useState<Algo | null>(null);
-   const [steps, setSteps] = useState<Step[]>([]);
-   const [index, setIndex] = useState(0);
- 
-   const metrics = useMemo(() => {
-    const comparisons = steps.filter(s => s.action === "compare").length;
-    const swaps = steps.filter(s => s.action === "swap" || s.action === "set").length;
-     return { comparisons, swaps, size: array.length };
-   }, [steps, array.length]);
- 
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [index, setIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(800);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-     try {
-       const c = sessionStorage.getItem("viz.code") || "";
-       const lang = sessionStorage.getItem("viz.language") || "cpp";
-       setCode(c);
-       setLanguage(lang);
-       const arrParsed = parseInlineArray(c);
-       const baseArray = arrParsed && arrParsed.length ? arrParsed : Array.from({ length: 10 }, (_, i) => 10 - i);
-       setArray(baseArray);
-       const detected = detectAlgorithm(c);
-       setAlgo(detected);
-      const target = parseTarget(c);
-       let st: Step[] = [];
-     const active = manualAlgo || detected;
-     if (active === "bubble") st = bubbleSteps(baseArray);
-     else if (active === "insertion") st = insertionSteps(baseArray);
-     else if (active === "selection") st = selectionSteps(baseArray);
-     else if (active === "quicksort") st = quickSteps(baseArray);
-     else if (active === "mergesort") st = mergeSteps(baseArray);
-     else if (active === "heapsort") st = heapSteps(baseArray);
-     else if (active === "shellsort") st = shellSteps(baseArray);
-     else if (active === "linearsearch") st = linearSteps(baseArray, target);
-     else if (active === "binarysearch") st = binarySteps(baseArray, target);
-       setSteps(st);
-       setIndex(0);
-     } catch {}
-  }, [manualAlgo]);
- 
-   const current = steps[index] || { array, i: 0, j: 0, action: "compare" as const };
-  const activeAlgo = manualAlgo || algo;
-  const complexity = getComplexity(activeAlgo);
- 
-   const prev = () => setIndex(i => Math.max(0, i - 1));
-   const next = () => setIndex(i => Math.min(steps.length - 1, i + 1));
- 
-   const barRef = useRef<HTMLDivElement>(null);
-  const prettyAlgo = useMemo(() => {
-    const names: Record<Algo, string> = {
-      bubble: "Bubble Sort",
-      insertion: "Insertion Sort",
-      selection: "Selection Sort",
-      quicksort: "Quick Sort",
-      mergesort: "Merge Sort",
-      heapsort: "Heap Sort",
-      shellsort: "Shell Sort",
-      linearsearch: "Linear Search",
-      binarysearch: "Binary Search",
-      unknown: "Unknown",
-    };
-    return names[activeAlgo] || "Unknown";
-  }, [activeAlgo]);
- 
-   return (
-     <div className="min-h-screen bg-white dark:bg-gray-900">
-       <div className="mx-auto max-w-7xl p-6">
-         <div className="mb-6">
-           <motion.h1 initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold text-gray-900 dark:text-white">
-             Algorithm Visualizer
-           </motion.h1>
-           <p className="text-sm text-gray-600 dark:text-gray-400">Interactive, step-controlled visualization based on your code.</p>
-         </div>
- 
-         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-           <div className="xl:col-span-2 space-y-6">
-             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-               <div className="flex items-center justify-between mb-3">
-                 <div>
-                   <div className="text-sm text-gray-600 dark:text-gray-400">Dataset Size</div>
-                   <div className="text-lg font-semibold text-gray-900 dark:text-white">{metrics.size}</div>
-                 </div>
-                 <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Algorithm</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">{prettyAlgo}</div>
-                 </div>
-                 {algo === "unknown" && (
-                   <div>
-                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Select Algorithm</label>
-                     <select
-                       value={manualAlgo || "unknown"}
-                       onChange={(e) => setManualAlgo(e.target.value as Algo)}
-                       className="h-8 rounded-md border border-gray-200 dark:border-gray-700 px-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-                     >
-                       <option value="unknown">Detect Automatically</option>
-                       <option value="linearsearch">Linear Search</option>
-                       <option value="binarysearch">Binary Search</option>
-                       <option value="bubble">Bubble Sort</option>
-                       <option value="selection">Selection Sort</option>
-                       <option value="insertion">Insertion Sort</option>
-                       <option value="quicksort">Quick Sort</option>
-                       <option value="mergesort">Merge Sort</option>
-                       <option value="heapsort">Heap Sort</option>
-                       <option value="shellsort">Shell Sort</option>
-                     </select>
-                   </div>
-                 )}
-                 <div>
-                   <div className="text-sm text-gray-600 dark:text-gray-400">Comparisons</div>
-                   <div className="text-lg font-semibold text-gray-900 dark:text-white">{metrics.comparisons}</div>
-                 </div>
-                 <div>
-                   <div className="text-sm text-gray-600 dark:text-gray-400">Swaps/Sets</div>
-                   <div className="text-lg font-semibold text-gray-900 dark:text-white">{metrics.swaps}</div>
-                 </div>
-               </div>
-               <div className="grid grid-cols-2 gap-3">
-                 <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                   <div className="text-xs text-gray-500 dark:text-gray-400">Worst-case</div>
-                   <div className="font-medium">{complexity.worst}</div>
-                 </div>
-                 <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                   <div className="text-xs text-gray-500 dark:text-gray-400">Average-case</div>
-                   <div className="font-medium">{complexity.average}</div>
-                 </div>
-                 <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                   <div className="text-xs text-gray-500 dark:text-gray-400">Best-case</div>
-                   <div className="font-medium">{complexity.best}</div>
-                 </div>
-                 <div className="p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                   <div className="text-xs text-gray-500 dark:text-gray-400">Space</div>
-                   <div className="font-medium">{complexity.space}</div>
-                 </div>
-               </div>
-             </div>
- 
-             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-               <div className="flex items-center justify-between mb-4">
-                 <div className="text-sm text-gray-600 dark:text-gray-400">Iteration</div>
-                 <div className="text-sm font-mono text-gray-900 dark:text-white">step {index + 1} / {steps.length}</div>
-                 <div className="flex gap-2">
-                   <button onClick={prev} className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1">
-                     <ChevronLeft size={16} /> Previous Step
-                   </button>
-                   <button onClick={next} className="px-3 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 flex items-center gap-1">
-                     Next Step <ChevronRight size={16} />
-                   </button>
-                 </div>
-               </div>
-               
-               <div ref={barRef} className="h-64 flex items-end gap-2">
-                 {current.array.map((v, idx) => {
-                   const highlight = idx === current.j || idx === current.j + (current.action === "swap" ? 1 : 0) || idx === current.i;
-                   return (
-                     <div key={idx} className="flex flex-col items-center gap-1">
-                       <div 
-                         className={`w-6 transition-all duration-300 rounded-t ${highlight ? 'bg-indigo-600' : 'bg-gray-400 dark:bg-gray-700'}`} 
-                         style={{ height: `${(v / Math.max(...current.array)) * 240}px` }} 
-                       />
-                       <div className="text-xs text-gray-600 dark:text-gray-400">{v}</div>
-                     </div>
-                   );
-                 })}
-               </div>
-               <div className="mt-4 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-                <div className="font-mono">i={current.i} j={current.j}{typeof (current as any).r === "number" ? ` r=${(current as any).r}` : ""} action={current.action}</div>
-                 {index === steps.length - 1 && (
-                   <div className="px-3 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-300">
-                     Final totals — comparisons: {metrics.comparisons}, swaps/sets: {metrics.swaps}
-                   </div>
-                 )}
-               </div>
-             </div>
-           </div>
- 
-           <div className="space-y-6">
-             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-               <div className="text-sm mb-2 text-gray-600 dark:text-gray-400">Your Code (read-only)</div>
-               <div className="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden" style={{ width: 600, height: 400 }}>
-                 <Monaco
-                   height="100%"
-                   language={language === "cpp" ? "cpp" : language}
-                   theme="vs-dark"
-                   value={code}
-                   options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
-                 />
-               </div>
-             </div>
-           </div>
-         </div>
-       </div>
-     </div>
-   );
- }
+    const c = sessionStorage.getItem("viz.code") || "";
+    const lang = sessionStorage.getItem("viz.language") || "cpp";
+    setCode(c);
+    setLanguage(lang);
+    
+    const arrParsed = parseInlineArray(c);
+    const baseArray = (arrParsed && arrParsed.length) ? arrParsed : [24, 15, 45, 8, 32, 10, 5, 20];
+    setArray(baseArray);
+
+    const detected = detectAlgorithm(c);
+    setAlgo(detected);
+    
+    const target = parseTarget(c);
+    let st: Step[] = [];
+    
+    if (detected === "twosum") st = twoSumSteps(baseArray, target || 9);
+    else if (detected === "bubble") st = bubbleSteps(baseArray);
+    else st = bubbleSteps(baseArray); // Default
+
+    setSteps(st);
+    setIndex(0);
+  }, []);
+
+  const next = useCallback(() => {
+    setIndex(i => {
+      if (i >= steps.length - 1) {
+        setIsPlaying(false);
+        return i;
+      }
+      return i + 1;
+    });
+  }, [steps.length]);
+
+  const prev = () => setIndex(i => Math.max(0, i - 1));
+  const reset = () => {
+    setIndex(0);
+    setIsPlaying(false);
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      timerRef.current = setInterval(next, speed);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isPlaying, next, speed]);
+
+  const currentStep = steps[index] || { array, i: -1, j: -1, action: "init", explanation: "Ready..." };
+  const complexity = getComplexity(algo);
+
+  return (
+    <div className="min-h-screen bg-[#0a0c10] text-gray-100 p-6 lg:p-10">
+      <div className="max-w-[1600px] mx-auto space-y-8">
+        
+        {/* Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-indigo-600/20 rounded-lg">
+                <Brain className="w-6 h-6 text-indigo-400" />
+              </div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+                AI Algorithm Visualizer
+              </h1>
+            </div>
+            <p className="text-gray-400 text-sm max-w-xl">
+              Witness your code in action. Our AI engine parses your logic and generates a step-by-step interactive animation.
+            </p>
+          </motion.div>
+
+          <div className="flex items-center gap-4 bg-gray-900/50 p-2 rounded-2xl border border-white/5 backdrop-blur-xl">
+            <div className="px-4 py-2 border-r border-white/10">
+              <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Detected Algorithm</span>
+              <span className="text-indigo-400 font-bold capitalize">{algo === 'twosum' ? 'Two Sum (Hash Map)' : algo}</span>
+            </div>
+            <div className="px-4 py-2">
+              <span className="text-xs text-gray-500 uppercase tracking-widest block mb-1">Complexity</span>
+              <span className="text-emerald-400 font-bold">{complexity.average}</span>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+          
+          {/* Main Visualizer Area */}
+          <div className="xl:col-span-8 space-y-6">
+            
+            {/* Animation Stage */}
+            <div className="relative bg-gray-900/40 rounded-3xl border border-white/5 overflow-hidden min-h-[500px] flex flex-col p-8 backdrop-blur-sm shadow-2xl">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/5 via-transparent to-purple-600/5 pointer-events-none" />
+              
+              {/* Stage Header */}
+              <div className="flex items-center justify-between mb-12 z-10">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10">
+                    <Zap className="w-4 h-4 text-yellow-400" />
+                    <span className="text-xs font-mono">Step {index + 1} of {steps.length}</span>
+                  </div>
+                </div>
+                
+                {/* Controls */}
+                <div className="flex items-center gap-3">
+                  <button onClick={reset} className="p-3 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group" title="Reset">
+                    <RotateCcw className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                  </button>
+                  <button onClick={prev} className="p-3 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
+                    <ChevronLeft className="w-6 h-6 text-gray-400 group-hover:text-white" />
+                  </button>
+                  <button 
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="w-14 h-14 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 rounded-2xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95"
+                  >
+                    {isPlaying ? <Pause className="fill-white" /> : <Play className="ml-1 fill-white" />}
+                  </button>
+                  <button onClick={next} className="p-3 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
+                    <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white" />
+                  </button>
+                  <select 
+                    value={speed} 
+                    onChange={(e) => setSpeed(Number(e.target.value))}
+                    className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value={1500}>0.5x</option>
+                    <option value={800}>1.0x</option>
+                    <option value={400}>2.0x</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Visualization Rendering */}
+              <div className="flex-1 flex flex-col justify-center z-10">
+                {algo === 'twosum' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12 h-full">
+                    {/* Array Section */}
+                    <div className="space-y-6">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                        <Layers className="w-4 h-4" /> Input Array
+                      </h3>
+                      <div className="flex flex-wrap gap-4">
+                        {currentStep.array.map((val, idx) => {
+                          const isCurrent = idx === currentStep.i;
+                          const isFound = idx === currentStep.j;
+                          return (
+                            <motion.div
+                              key={idx}
+                              layout
+                              className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold border-2 transition-all duration-500 ${
+                                isCurrent ? 'bg-indigo-600 border-indigo-400 shadow-lg shadow-indigo-600/40 scale-110' :
+                                isFound ? 'bg-emerald-600 border-emerald-400 shadow-lg shadow-emerald-600/40' :
+                                'bg-gray-800 border-white/10 opacity-50'
+                              }`}
+                            >
+                              {val}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Hash Map Section */}
+                    <div className="space-y-6">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                        <Database className="w-4 h-4" /> Hash Map
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        <AnimatePresence mode="popLayout">
+                          {Object.entries(currentStep.hashMap || {}).map(([val, idx]) => (
+                            <motion.div
+                              key={val}
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="p-3 bg-white/5 border border-white/10 rounded-xl flex justify-between items-center"
+                            >
+                              <span className="text-indigo-400 font-mono">{val}</span>
+                              <span className="text-xs text-gray-500">→ index {idx}</span>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-end justify-center gap-3">
+                    {currentStep.array.map((val, idx) => {
+                      const max = Math.max(...currentStep.array);
+                      const height = (val / max) * 100;
+                      const isComparing = idx === currentStep.j || idx === currentStep.j + 1;
+                      const isPivot = idx === currentStep.i;
+
+                      return (
+                        <div key={idx} className="flex flex-col items-center gap-3 group">
+                          <motion.div
+                            layout
+                            animate={{
+                              height: `${height}%`,
+                              backgroundColor: isComparing ? '#6366f1' : (isPivot ? '#8b5cf6' : '#1f2937')
+                            }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            className="w-10 rounded-t-xl relative shadow-2xl"
+                          >
+                            {isComparing && (
+                              <div className="absolute -top-10 left-1/2 -translate-x-1/2 animate-bounce">
+                                <Zap className="w-5 h-5 text-indigo-400" />
+                              </div>
+                            )}
+                          </motion.div>
+                          <span className={`text-xs font-mono font-bold ${isComparing ? 'text-indigo-400' : 'text-gray-500'}`}>
+                            {val}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Explanation Box */}
+              <div className="mt-12 p-6 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl flex gap-4 z-10">
+                <div className="p-2 bg-indigo-600 rounded-xl h-fit">
+                  <Brain className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-indigo-400 mb-1">AI Logic Guide</h4>
+                  <AnimatePresence mode="wait">
+                    <motion.p 
+                      key={index}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="text-gray-300 text-sm leading-relaxed"
+                    >
+                      {currentStep.explanation}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar Area */}
+          <div className="xl:col-span-4 space-y-6">
+            
+            {/* Code Snippet */}
+            <div className="bg-gray-900/40 rounded-3xl border border-white/5 overflow-hidden backdrop-blur-sm shadow-2xl">
+              <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-white/5">
+                <div className="flex items-center gap-2">
+                  <Code className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm font-bold tracking-wide uppercase">Your Implementation</span>
+                </div>
+                <span className="text-[10px] font-mono text-gray-500 uppercase">{language}</span>
+              </div>
+              <div className="h-[400px]">
+                <Monaco
+                  height="100%"
+                  language={language === "cpp" ? "cpp" : language}
+                  theme="vs-dark"
+                  value={code}
+                  options={{ 
+                    readOnly: true, 
+                    minimap: { enabled: false }, 
+                    fontSize: 14,
+                    lineNumbers: "on",
+                    padding: { top: 20 },
+                    scrollBeyondLastLine: false,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    backgroundColor: "transparent"
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Performance Stats */}
+            <div className="bg-gray-900/40 rounded-3xl border border-white/5 p-6 backdrop-blur-sm shadow-2xl space-y-6">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <Info className="w-5 h-5" />
+                <h3 className="font-bold">Algorithmic Insight</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Time Complexity</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[10px] text-gray-500 block">Worst Case</span>
+                      <span className="font-mono text-sm text-red-400">{complexity.worst}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 block">Best Case</span>
+                      <span className="font-mono text-sm text-emerald-400">{complexity.best}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Space Complexity</div>
+                  <span className="font-mono text-sm text-indigo-400">{complexity.space}</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+      `}</style>
+    </div>
+  );
+}

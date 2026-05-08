@@ -1,7 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, X, Calendar, User, AlertCircle, Info, CheckCircle, Star } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Notice {
   id: string;
@@ -63,6 +63,16 @@ const mockNotices: Notice[] = [
 export function NoticeBoard({ notices = mockNotices, userRole = 'student' }: NoticeBoardProps) {
   const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
   const [filter, setFilter] = useState<'all' | 'announcement' | 'quiz' | 'assignment'>('all');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const formatDate = (dateString: string) => {
+    if (!mounted) return dateString; // Return raw string during SSR
+    return new Date(dateString).toLocaleDateString();
+  };
 
   const getTypeIcon = (type: Notice['type']) => {
     switch (type) {
@@ -186,7 +196,7 @@ export function NoticeBoard({ notices = mockNotices, userRole = 'student' }: Not
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar size={12} />
-                        <span>{new Date(notice.date).toLocaleDateString()}</span>
+                        <span>{formatDate(notice.date)}</span>
                       </div>
                     </div>
                   </div>
@@ -248,7 +258,7 @@ export function NoticeBoard({ notices = mockNotices, userRole = 'student' }: Not
                     </div>
                     <div className="flex items-center space-x-1">
                       <Calendar size={14} />
-                      <span>{new Date(selectedNotice.date).toLocaleDateString()}</span>
+                      <span>{formatDate(selectedNotice.date)}</span>
                     </div>
                   </div>
                   <div className={`px-3 py-1 rounded-full text-xs font-medium ${

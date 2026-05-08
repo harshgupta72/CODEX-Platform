@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { Moon, Sun, User, LogOut, Settings, Trophy, BarChart3, Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { getFirebase } from "@/lib/firebase";
 import { hasFirebaseConfig } from "@/lib/env";
 import { signInWithPopup, signOut } from "firebase/auth";
@@ -42,6 +43,7 @@ export function Navbar() {
   }, []);
   
   const { user, isAuthenticated } = useAuth();
+  const { profile } = useProfile();
 
   const toggleTheme = () => {
     const newTheme = (resolvedTheme || theme) === "dark" ? "light" : "dark";
@@ -149,6 +151,13 @@ export function Navbar() {
                 Problems
               </Link>
               <Link 
+                href="/practice" 
+                onClick={() => setLogoPulse((v) => v + 1)}
+                className="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-100 dark:bg-indigo-900/30 px-3 py-1 rounded-lg transition-all hover:scale-105"
+              >
+                Practice section
+              </Link>
+              <Link 
                 href="/editor" 
                 onClick={() => setLogoPulse((v) => v + 1)}
                 className="text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors"
@@ -182,10 +191,10 @@ export function Navbar() {
                 className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                  {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                  {profile?.full_name?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                 </div>
                 <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {user.displayName || 'User'}
+                  {profile?.full_name || user.displayName || 'User'}
                 </span>
               </button>
 
@@ -202,17 +211,17 @@ export function Navbar() {
                     <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                          {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                          {profile?.full_name?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                            {user.displayName || 'User'}
+                            {profile?.full_name || user.displayName || 'User'}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
                             {user.email}
                           </p>
                           <p className="text-xs text-indigo-600 dark:text-indigo-400 capitalize">
-                            {user.userType} (ID: {user.userId})
+                            {profile?.role || user.userType} (ID: {user.userId})
                           </p>
                         </div>
                       </div>
@@ -259,13 +268,14 @@ export function Navbar() {
                           </Link>
                         </>
                       )}
-                      <button
+                      <Link
+                        href="/profile"
                         onClick={() => setShowProfileMenu(false)}
                         className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
                       >
                         <Settings size={16} />
                         <span>Settings</span>
-                      </button>
+                      </Link>
                     </div>
 
                     {/* Sign Out */}

@@ -3,15 +3,25 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { RequireAuth, RequireRole } from "@/components/auth-gate";
 import { useAuth } from "@/hooks/useAuth";
-import { BookOpen, Trophy, TrendingUp, Code, Users, Clock, Star, Target, Zap, FileText } from "lucide-react";
+import { BookOpen, Trophy, TrendingUp, Code, Users, Clock, Star, Target, Zap, FileText, Loader2 } from "lucide-react";
 import GlobalChatbot from "@/components/global-chatbot";
 import { useEffect, useState } from "react";
 import { getFirebase } from "@/lib/firebase";
 import { hasFirebaseConfig } from "@/lib/env";
+import { useProfile } from "@/hooks/useProfile";
+import { useRouter } from "next/navigation";
 
 export default function StudentHome() {
   const { user } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<Array<{ id: string; title: string; dueDate: string }>>([]);
+
+  useEffect(() => {
+    if (!profileLoading && profile && (!profile.full_name || !profile.phone)) {
+      router.push("/auth/onboarding");
+    }
+  }, [profile, profileLoading, router]);
 
   const quickStats = [
     { label: "Problems Solved", value: "24", icon: Code, color: "text-blue-600" },
@@ -35,6 +45,14 @@ export default function StudentHome() {
     })();
   }, []);
 
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
   return (
     <RequireAuth>
       <RequireRole role="student">
@@ -48,7 +66,7 @@ export default function StudentHome() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-4xl font-bold mb-2">
-                  Welcome back, {user?.displayName || 'Student'}! 🚀
+                  Welcome back, {profile?.full_name || user?.displayName || 'Student'}! 🚀
                 </h1>
                 <p className="text-blue-100 text-lg">
                   Ready to continue your coding journey? Let's solve some problems!

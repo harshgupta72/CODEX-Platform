@@ -5,6 +5,7 @@ import { AlertTriangle, UserCheck, UserX, Move, Users, EyeOff } from "lucide-rea
 import { useFaceAI } from "@/hooks/useFaceAI";
 import { useDraggable } from "@/hooks/useDraggable";
 import { PROCTOR_CONFIG } from "@/lib/proctorConfig";
+import { useAdvancedAIProctor } from "@/modules/proctor/AdvancedAIProctor";
 
 interface ProctorMonitorProps {
   referenceDescriptor: Float32Array;
@@ -22,10 +23,13 @@ export function ProctorMonitor({ referenceDescriptor, onViolation, isTerminated,
   const { getFaceDescriptor, matchFace } = useFaceAI();
   
   const [status, setStatus] = useState<MonitorStatus>("active");
-  const [consecutiveViolations, setConsecutiveViolations] = useState(0);
+  const consecutiveViolationsRef = useRef(0);
   
   const streamRef = useRef<MediaStream | null>(null);
   const startedAtRef = useRef<number>(Date.now());
+
+  // Attach Advanced AI Proctor (Phase 1 & 2)
+  useAdvancedAIProctor(videoRef);
 
   // Play warning sound
   const playWarningSound = useCallback(() => {
@@ -98,7 +102,7 @@ export function ProctorMonitor({ referenceDescriptor, onViolation, isTerminated,
       if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
       if (Date.now() - startedAtRef.current < PROCTOR_CONFIG.GRACE_PERIOD_MS) {
         setStatus("active");
-        setConsecutiveViolations(0);
+        consecutiveViolationsRef.current = 0;
         return;
       }
       
@@ -128,24 +132,21 @@ export function ProctorMonitor({ referenceDescriptor, onViolation, isTerminated,
         
         // Handle Violations with Debounce
         if (newStatus !== "active") {
-          setConsecutiveViolations(prev => {
-            const newCount = prev + 1;
-            if (newCount >= PROCTOR_CONFIG.VIOLATION_DEBOUNCE_FRAMES) {
-              // Trigger Violation
-              playWarningSound();
-              
-              let violationType = "Unknown Violation";
-              if (newStatus === "not_detected") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.NOT_DETECTED;
-              if (newStatus === "mismatch") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.MISMATCH;
-              if (newStatus === "fullscreen_exit") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.FULLSCREEN_EXIT;
-              
-              onViolation(1, violationType);
-              return 0; // Reset debounce counter after triggering
-            }
-            return newCount;
-          });
+          consecutiveViolationsRef.current += 1;
+          if (consecutiveViolationsRef.current >= PROCTOR_CONFIG.VIOLATION_DEBOUNCE_FRAMES) {
+            // Trigger Violation
+            playWarningSound();
+            
+            let violationType = "Unknown Violation";
+            if (newStatus === "not_detected") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.NOT_DETECTED;
+            if (newStatus === "mismatch") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.MISMATCH;
+            if (newStatus === "fullscreen_exit") violationType = PROCTOR_CONFIG.VIOLATION_MESSAGES.FULLSCREEN_EXIT;
+            
+            onViolation(1, violationType);
+            consecutiveViolationsRef.current = 0; // Reset debounce counter after triggering
+          }
         } else {
-          setConsecutiveViolations(0); // Reset if face is back
+          consecutiveViolationsRef.current = 0; // Reset if face is back
         }
 
       } catch (err) {

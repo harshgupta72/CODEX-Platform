@@ -15,6 +15,7 @@ import { ProctorMonitor } from "@/components/proctor/ProctorMonitor";
 import { TerminationModal } from "@/components/proctor/TerminationModal";
 import { ViolationModal } from "@/components/proctor/ViolationModal";
 import { PROCTOR_CONFIG } from "@/lib/proctorConfig";
+import { useProctorStore } from "@/modules/monitoring/ProctorStore";
 
 const Monaco = NextDynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -48,13 +49,19 @@ export default function EditorPage() {
   const [violationCount, setViolationCount] = useState(0);
   const [currentViolation, setCurrentViolation] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const setProctorEnabled = useProctorStore(state => state.setEnabled);
+
   useEffect(() => {
     setViolationCount(0);
     setProctorTerminated(false);
     setCurrentViolation(null);
     setSessionId(null);
     setProctorActive(false);
-  }, []);
+
+    // Enable proctoring monitoring when on this page
+    setProctorEnabled(true);
+    return () => setProctorEnabled(false);
+  }, [setProctorEnabled]);
 
   // Proctor Setup Complete Handler
   const handleProctorSetupComplete = (descriptor: Float32Array, id: string) => {
@@ -261,15 +268,19 @@ export default function EditorPage() {
   const handleAnalyzeCode = async () => {
     if (!canAnalyze) return;
     setIsAnalyzing(true);
+    setShowAnalyzer(true);
     try {
-      try { sessionStorage.setItem("proctor.navigating", "1"); } catch {}
-      await endProctor("code_analysis");
-      setIsFullscreen(false);
-      try {
-        sessionStorage.setItem("viz.code", code);
-        sessionStorage.setItem("viz.language", language);
-      } catch {}
-      router.push("/visualize/auto");
+      const res = await axios.post("/api/rag-analyzer", { 
+        code, 
+        language, 
+        userId: user?.userId 
+      });
+      setAnalysisResult(res.data.report);
+      toast.success("Analysis complete!");
+    } catch (error: any) {
+      console.error("Analysis failed:", error);
+      toast.error("Analysis failed. Please try again.");
+      setShowAnalyzer(false);
     } finally {
       setIsAnalyzing(false);
     }

@@ -8,7 +8,7 @@ export const PROCTOR_CONFIG = {
   LIVENESS_CHECK_INTERVAL: 2000,
   
   // Violations
-  MAX_WARNINGS: 5,
+  MAX_WARNINGS: 12,
   VIOLATION_DEBOUNCE_FRAMES: 3,
   GRACE_PERIOD_MS: 5000, // 5s grace period at start
   

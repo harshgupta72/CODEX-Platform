@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { getFirebase } from "@/lib/firebase";
 import toast from "react-hot-toast";
 import { AuthErrorModal } from "@/components/auth-error-modal";
@@ -65,7 +65,25 @@ export default function SignUpPage() {
       
       console.log("Saving user data:", userData);
       await setDoc(doc(db, "users", user.uid), userData);
-      console.log("User data saved successfully");
+
+      // Create profile record automatically
+      const profileData = {
+        id: user.uid,
+        full_name: user.displayName || "",
+        username: user.email?.split('@')[0] || `user_${userId}`,
+        email: user.email,
+        avatar_url: user.photoURL || "",
+        bio: "",
+        phone: "",
+        learning_goal: "",
+        github_url: "",
+        linkedin_url: "",
+        role: userType,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      };
+      await setDoc(doc(db, "profiles", user.uid), profileData);
+      console.log("User data and profile saved successfully");
 
       // Store in localStorage for immediate use
       localStorage.setItem("userType", userType);
@@ -115,7 +133,25 @@ export default function SignUpPage() {
       
       console.log("Saving Google user data:", userData);
       await setDoc(doc(db, "users", user.uid), userData);
-      console.log("Google user data saved successfully");
+
+      // Create profile record automatically
+      const profileData = {
+        id: user.uid,
+        full_name: user.displayName || "",
+        username: user.email?.split('@')[0] || `user_${userId}`,
+        email: user.email,
+        avatar_url: user.photoURL || "",
+        bio: "",
+        phone: "",
+        learning_goal: "",
+        github_url: "",
+        linkedin_url: "",
+        role: userType,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      };
+      await setDoc(doc(db, "profiles", user.uid), profileData);
+      console.log("Google user data and profile saved successfully");
 
       // Store in localStorage for immediate use
       localStorage.setItem("userType", userType);
@@ -137,7 +173,7 @@ export default function SignUpPage() {
   const handleSuccessContinue = () => {
     // Redirect based on user type after success modal
     if (userType === "student") {
-      router.push("/dashboard/student");
+      router.push("/auth/onboarding");
     } else {
       router.push("/dashboard/instructor");
     }
